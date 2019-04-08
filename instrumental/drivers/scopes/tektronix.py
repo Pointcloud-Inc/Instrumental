@@ -63,6 +63,7 @@ MODEL_CHANNELS = {
     'DPO4054': 4,
     'MSO4104': 4,
     'DPO4104': 4,
+    'DPO7354C': 4,
 }
 
 
@@ -569,6 +570,56 @@ class MSO_DPO_4000(StatScope):
                                       'MSO4054', 'DPO4054', 'MSO4104', 'DPO4104',])
     datetime = TekScope._datetime
 
+class MSO_DPO_7000(StatScope):
+    """A Tektronix MSO/DPO 7000 series oscilloscope."""
+    _INST_PARAMS_ = ['visa_address']
+    _INST_VISA_INFO_ = ('TEKTRONIX', ['DPO7354C',])
+
+    datetime = TekScope._datetime
+
+    # TODO: generalize this and integrate into instrumental properly
+    @staticmethod
+    def formatfloat(num):
+        mag = 3 * int(np.floor(np.log10(np.abs(num)) / 3))
+        mantissa = num / 10**mag
+        if mag == 0:
+            return "%.4f" % (mantissa)
+        elif mag > 0:
+            return "%.4fE+%d" % (mantissa, mag)
+        elif mag < 0:
+            return "%.4fE-%d" % (mantissa, -mag)
+
+    def setint(self, cmd, value):
+        strvalue = "%d" % (value)
+        self.write(cmd + " " + strvalue)
+        result = self.query(cmd + "?")
+        
+        if result == strvalue:
+            raise ValueError(
+                "'" + cmd + "?' returned '" + result 
+                + "' but expected '" + strvalue
+            )
+
+    def setfloat(scope, cmd, value):
+        strvalue = tek_formatfloat(value)
+        scope.write(cmd + " " + strvalue)
+        result = self.query(cmd + "?")
+        
+        if result == strvalue:
+            raise ValueError(
+                "'" + cmd + "?' returned '" + result 
+                + "' but expected '" + strvalue
+            )
+
+    def setstr(scope, cmd, value):
+        strvalue = upper(value)
+        scope.write(cmd + " " + strvalue)
+        result = self.query(cmd + "?")
+
+        if result == strvalue:
+            raise ValueError(
+                "'" + cmd + "?' returned '" + result 
+                + "' but expected '" + strvalue
 
 def load_csv(filename):
     """Load CSV data produced by a Tektronix oscilloscope.
