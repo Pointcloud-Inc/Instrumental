@@ -594,32 +594,33 @@ class MSO_DPO_7000(StatScope):
         self.write(cmd + " " + strvalue)
         result = self.query(cmd + "?")
         
-        if result == strvalue:
+        if result != strvalue:
             raise ValueError(
                 "'" + cmd + "?' returned '" + result 
-                + "' but expected '" + strvalue
+                + "' but expected '" + strvalue + "'"
             )
 
-    def setfloat(scope, cmd, value):
-        strvalue = tek_formatfloat(value)
-        scope.write(cmd + " " + strvalue)
+    def setfloat(self, cmd, value):
+        strvalue = self.formatfloat(value)
+        self.write(cmd + " " + strvalue)
         result = self.query(cmd + "?")
         
-        if result == strvalue:
+        if result != strvalue:
             raise ValueError(
                 "'" + cmd + "?' returned '" + result 
-                + "' but expected '" + strvalue
+                + "' but expected '" + strvalue + "'"
             )
 
-    def setstr(scope, cmd, value):
-        strvalue = upper(value)
-        scope.write(cmd + " " + strvalue)
+    def setstr(self, cmd, value):
+        strvalue = value.upper()
+        self.write(cmd + " " + strvalue)
         result = self.query(cmd + "?")
 
-        if result == strvalue:
+        if result != strvalue:
             raise ValueError(
                 "'" + cmd + "?' returned '" + result 
-                + "' but expected '" + strvalue
+                + "' but expected '" + strvalue + "'"
+            )
 
 def load_csv(filename):
     """Load CSV data produced by a Tektronix oscilloscope.
