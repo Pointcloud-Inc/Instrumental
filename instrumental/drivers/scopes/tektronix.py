@@ -4,9 +4,11 @@
 Driver module for Tektronix oscilloscopes.
 """
 import datetime as dt
+import time
 
 import visa
 from pyvisa.constants import InterfaceType
+from pyvisa.errors import VisaIOError
 import numpy as np
 from pint import UndefinedUnitError
 
@@ -580,7 +582,11 @@ class MSO_DPO_7000(StatScope):
     # TODO: generalize this and integrate into instrumental properly
     @staticmethod
     def formatfloat(num):
-        mag = 3 * int(np.floor(np.log10(np.abs(num)) / 3))
+        if num != 0:
+            mag = 3 * int(np.floor(np.log10(np.abs(num)) / 3))
+        else:
+            mag = 0
+
         mantissa = num / 10**mag
         if mag == 0:
             return "%.4f" % (mantissa)
@@ -592,7 +598,7 @@ class MSO_DPO_7000(StatScope):
     def setint(self, cmd, value):
         strvalue = "%d" % (value)
         self.write(cmd + " " + strvalue)
-        result = self.query(cmd + "?")
+        result = self.query(cmd + "?").strip()
         
         if result != strvalue:
             raise ValueError(
@@ -603,7 +609,7 @@ class MSO_DPO_7000(StatScope):
     def setfloat(self, cmd, value):
         strvalue = self.formatfloat(value)
         self.write(cmd + " " + strvalue)
-        result = self.query(cmd + "?")
+        result = self.query(cmd + "?").strip()
         
         if result != strvalue:
             raise ValueError(
@@ -614,13 +620,22 @@ class MSO_DPO_7000(StatScope):
     def setstr(self, cmd, value):
         strvalue = value.upper()
         self.write(cmd + " " + strvalue)
-        result = self.query(cmd + "?")
+        result = self.query(cmd + "?").strip()
 
         if result != strvalue:
             raise ValueError(
                 "'" + cmd + "?' returned '" + result 
                 + "' but expected '" + strvalue + "'"
             )
+
+    def repeat_get_data(self, channel=1, width=2, max_attempts=10):
+        attempts = 0
+        while attempts < max_attempts:
+            try:
+                return self.get_data(channel=channel, width=width)
+            except VisaIOError:
+                print("VisaIOError - trying again...")
+                attempts += 1
 
 def load_csv(filename):
     """Load CSV data produced by a Tektronix oscilloscope.
