@@ -322,3 +322,12 @@ class Newport_1830_C(PowerMeter, VisaMixin):
     @local_lockout.setter
     def local_lockout(self, enable):
         self.write("L{}", int(enable))
+
+class Newport_2936_R(PowerMeter, VisaMixin):
+    """A Newport 2936-R power meter"""
+
+    def write(self, message):
+        return self._rsrc.write(message + "\n")
+        
+    def read(self):
+        return self._rsrc.read_bytes(1).decode("utf-8").strip("\r\n")
