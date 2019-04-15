@@ -20,7 +20,8 @@ from . import PowerMeter
 from .. import Facet, MessageFacet, VisaMixin, deprecated
 from ..util import visa_timeout_context
 from ... import Q_
-
+import time
+from pyvisa import errors
 
 def _check_visa_support(visa_inst):
     with visa_timeout_context(visa_inst, 100):
@@ -325,9 +326,123 @@ class Newport_1830_C(PowerMeter, VisaMixin):
 
 class Newport_2936_R(PowerMeter, VisaMixin):
     """A Newport 2936-R power meter"""
+    timeout = 10e-3
+
+    def _initialize(self):
+        self.flush_read()
+
+        self.set_channel(1)
+        self.set_units('watts')
+        self.set_channel(2)
+        self.set_units('watts')
 
     def write(self, message):
-        return self._rsrc.write(message + "\n")
+        time.sleep(self.timeout)
+        return self._rsrc.write(message + '\n')
         
     def read(self):
-        return self._rsrc.read_bytes(1).decode("utf-8").strip("\r\n")
+        while True:
+            try:
+                time.sleep(self.timeout)
+                return self._rsrc.read_bytes(1).decode("utf-8").strip("\r\n")
+            except errors.VisaIOError:
+                pass
+
+    def flush_read(self):
+        try:
+            while True:
+                time.sleep(self.timeout)
+                self._rsrc.read_bytes(1)
+        except errors.VisaIOError:
+            pass
+            
+    def query(self, message):
+        self.write(message)
+        return self.read()
+
+    def set_channel(self, channel):
+        return self.write('pm:channel %d' % channel)
+
+    def set_units(self, units, channel=1):
+        """ Set units for power measurements.
+        
+        Parameters
+        ----------
+        units : str
+            'amps', 'volts', 'watts', 'watts_cm2', 'joules', 'joules_cm2','dbm'
+        """
+
+        valid_units = {
+            'amps': 0,
+            'volts': 1,
+            'watts': 2,
+            'watts_cm2': 3,
+            'joules': 4, 
+            'joules_cm2': 5, 
+            'dbm': 6
+            }
+
+        self.set_channel(channel)
+        return self.write('pm:units %d' % valid_units[units.lower()])
+
+    def set_analogfilter(self, mode, channel=1):
+        """ Set analog filter mode.
+
+        Parameters
+        ----------
+        mode : str
+            'None', '250khz', '12.5khz', '1khz', '5hz'
+        """
+        valid_modes = {
+            'None': 0,
+            '250khz': 1,
+            '12.5khz': 2, 
+            '1khz': 3,
+            '5hz': 4
+        }
+
+        self.set_channel(channel)
+        return self.write('pm:analogfilter %d' % valid_modes[mode.lower()])
+ 
+    def set_digitalfilter(self, num, channel=1):
+        """ Set digital filter mode.
+
+        Parameters
+        ----------
+        num : int
+            Integer between 0 and 10,000
+        """
+        assert num >= 0 and num <= 10000
+        self.set_channel(channel)
+        return self.write('pm:digitalfilter %d' % num)
+    
+    def set_autoranging(self, auto, channel=1):
+        """ Turns auto-ranging on / off.
+
+        Parameters
+        ----------
+        auto : bool
+        """
+        valid_auto = {
+            True: 1,
+            False: 0
+        }
+        self.set_channel(channel)
+        return self.write('pm:auto %d' % valid_auto[auto])
+    
+    def set_range(self, value, channel=1):
+        """ Set power range.
+
+        Parameters
+        ----------
+        value : int
+            Integer between 0 and 7
+        """
+        assert value >= 0 and value <= 7
+        self.set_channel(channel)
+        return self.write('pm:range %d' % value)
+
+    def get_power(self, channel=1):
+        self.set_channel(channel)
+        return float(self.query("pm:power?"))
+     
