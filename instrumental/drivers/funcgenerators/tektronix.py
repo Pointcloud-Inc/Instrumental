@@ -771,8 +771,7 @@ class AFG_3000(FunctionGenerator, VisaMixin):
 from ftplib import FTP
 
 class AWG_70000A(FunctionGenerator, VisaMixin):
-    #max_block_bytes = 100000000
-    max_block_bytes = 1000
+    block_size = 100000000
 
     def _initialize(self):
         response = self.query('*IDN?')
@@ -849,12 +848,23 @@ class AWG_70000A(FunctionGenerator, VisaMixin):
 
     def send_file(self, filename: str, data:bytes):
         self.delete_file(filename)
+        
+        # Break up file into blocks
+        blocks = []
+        num_blocks = len(data) // self.block_size
+        for i in range(num_blocks):
+            blocks.append(data[i*self.block_size : (i+1)*self.block_size])
+        blocks.append(data[num_blocks*self.block_size:])
 
-        num = len(data)
-        header = 'mmemory:data "{}",#{}{}'.format(filename, len(str(num)), num)
-        message = header.encode() + data + self._rsrc.read_termination.encode()
+        # Send each block separately
+        for i, b in enumerate(blocks):
+            self._send_file_block(filename, b, i*self.block_size) 
+
+    def _send_file_block(self, filename: str, block: bytes, offset=0):
+        num = len(block)
+        header = 'mmemory:data "{}",{},#{}{}'.format(
+            filename, offset, len(str(num)), num)
+
+        message = header.encode() + block + self._rsrc.read_termination.encode()
         self._rsrc.write_raw(message)
-
-    def _send_file_chunk(self, filename: str, chunk:bytes, offset=0):
-        pass
 
