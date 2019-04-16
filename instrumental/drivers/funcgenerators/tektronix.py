@@ -767,3 +767,68 @@ class AFG_3000(FunctionGenerator, VisaMixin):
     def trigger(self):
         """Manually force a trigger event"""
         self.write('trig')
+
+class AWG_70000A(FunctionGenerator, VisaMixin):
+    def _initialize(self):
+        response = self.query('*IDN?')
+        self._rsrc.read_termination = infer_termination(response)
+
+    def set_mode(self, mode):
+        """ Set operating mode.
+
+        Parameters
+        ----------
+        mode: str
+            'awg' (arbitrary waveform generator) or 'fgen' (function generator)
+        """
+        valid_modes = {
+            'awg': 'awg',
+            'fgen': 'fgen'
+        }
+        self.write('instrument:mode {}', valid_modes[mode.lower()])
+
+    def set_vpp(self, vpp, channel=1):
+        self.write('fgen:channel{}:amplitude:voltage {}', channel, vpp)
+
+    def set_freq(self, freq, channel=1):
+        self.write('fgen:channel{}:frequency {}', channel, freq)
+
+    def set_functype(self, functype, channel=1):
+        valid_functypes = {
+            'sine': 'sine',
+            'square': 'squ',
+            'triangle': 'tri',
+            'noise': 'nois',
+            'dc': 'dc',
+            'gaussian': 'gaus',
+            'exp_rise': 'expr',
+            'exp_decay': 'expd',
+            'none': 'none',
+        }
+
+        self.write(
+            'fgen:channel{}:type {}',
+            channel,
+            valid_functypes[functype.lower()]
+        )
+
+    def set_output(self, output, channel=1):
+        valid_outputs = {
+            True: 'on',
+            False: 'off'
+        }
+        self.write('output{}:state {}', channel, valid_outputs[output])
+
+    def set_trigger(self, trigger, channel=1):
+        valid_trigger = {
+            'continuous': 'continuous',
+            'triggered': 'triggered',
+            'tcontinuous': 'tcontinuous'
+        }
+        self.write('source{}:rmode {}', channel, valid_trigger[trigger])
+
+    def run(self):
+        self.write('awgcontrol:run:immediate')
+
+    def stop(self):
+        self.write('awgcontrol:stop:immediate')
