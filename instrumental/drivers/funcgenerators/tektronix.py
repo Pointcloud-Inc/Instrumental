@@ -768,7 +768,12 @@ class AFG_3000(FunctionGenerator, VisaMixin):
         """Manually force a trigger event"""
         self.write('trig')
 
+from ftplib import FTP
+
 class AWG_70000A(FunctionGenerator, VisaMixin):
+    #max_block_bytes = 100000000
+    max_block_bytes = 1000
+
     def _initialize(self):
         response = self.query('*IDN?')
         self._rsrc.read_termination = infer_termination(response)
@@ -832,3 +837,24 @@ class AWG_70000A(FunctionGenerator, VisaMixin):
 
     def stop(self):
         self.write('awgcontrol:stop:immediate')
+
+    def set_path(self, path: str):
+        self.write('mmemory:cdirectory "{}"', path)
+
+    def get_path(self):
+        return self.query('mmemory:cdirectory?')
+
+    def delete_file(self, filename: str):
+        self.write('mmemory:delete "{}"', filename)
+
+    def send_file(self, filename: str, data:bytes):
+        self.delete_file(filename)
+
+        num = len(data)
+        header = 'mmemory:data "{}",#{}{}'.format(filename, len(str(num)), num)
+        message = header.encode() + data + self._rsrc.read_termination.encode()
+        self._rsrc.write_raw(message)
+
+    def _send_file_chunk(self, filename: str, chunk:bytes, offset=0):
+        pass
+
