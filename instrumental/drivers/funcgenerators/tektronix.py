@@ -6,6 +6,10 @@ Driver module for Tektronix function generators. Currently supports:
 * AFG 3000 series
 """
 import numpy as np
+import os.path
+import hdf5storage
+from typing import Iterable
+from pyvisa import errors
 from . import FunctionGenerator
 from .. import VisaMixin, MessageFacet
 from ... import u, Q_
@@ -768,14 +772,20 @@ class AFG_3000(FunctionGenerator, VisaMixin):
         """Manually force a trigger event"""
         self.write('trig')
 
-from ftplib import FTP
-
 class AWG_70000A(FunctionGenerator, VisaMixin):
     block_size = 100000000
 
     def _initialize(self):
         response = self.query('*IDN?')
         self._rsrc.read_termination = infer_termination(response)
+    
+    def wait_until_complete(self):
+        while True:
+            try: 
+                if self.query('*OPC?') == '1':
+                    return
+            except errors.VisaIOError: 
+                pass
 
     def set_mode(self, mode):
         """ Set operating mode.
@@ -831,6 +841,9 @@ class AWG_70000A(FunctionGenerator, VisaMixin):
         }
         self.write('source{}:rmode {}', channel, valid_trigger[trigger])
 
+    def set_sample_rate(self, sample_rate):
+        self.write('clock:srate {}', float(sample_rate))
+
     def run(self):
         self.write('awgcontrol:run:immediate')
 
@@ -846,10 +859,15 @@ class AWG_70000A(FunctionGenerator, VisaMixin):
     def delete_file(self, filename: str):
         self.write('mmemory:delete "{}"', filename)
 
-    def send_file(self, filename: str, data:bytes):
-        self.delete_file(filename)
+    def send_file(self, local_filename: str, remote_filename:str):
+        # Read local file
+        with open(local_filename, "rb") as f:
+            data = f.read()
+
+        # Delete remote file
+        self.delete_file(remote_filename)
         
-        # Break up file into blocks
+        # Break up file data into blocks
         blocks = []
         num_blocks = len(data) // self.block_size
         for i in range(num_blocks):
@@ -858,7 +876,7 @@ class AWG_70000A(FunctionGenerator, VisaMixin):
 
         # Send each block separately
         for i, b in enumerate(blocks):
-            self._send_file_block(filename, b, i*self.block_size) 
+            self._send_file_block(remote_filename, b, i*self.block_size) 
 
     def _send_file_block(self, filename: str, block: bytes, offset=0):
         num = len(block)
@@ -868,3 +886,59 @@ class AWG_70000A(FunctionGenerator, VisaMixin):
         message = header.encode() + block + self._rsrc.read_termination.encode()
         self._rsrc.write_raw(message)
 
+    def load_waveform_file(self, filename:str, norm='keepoffset',
+            waveform=None):
+        valid_norm = {
+            'none': 'none',
+            'fullscale': 'fscale',
+            'keepoffset': 'zreference'
+        }
+
+        self.write('mmemory:open:parameter:normalize {}', valid_norm[norm])
+        if waveform:
+            self.write(
+                'mmemory:open:sasset:waveform "{}","{}"',
+                filename,
+                waveform
+            )
+        else:
+            self.write(
+                'mmemory:open:sasset:waveform "{}"',
+                filename
+            )
+        self.wait_until_complete()
+
+    def load_waveform(self, filename:str, waveform:str, channel=1,
+            norm='keepoffset'):
+        self.load_waveform_file(filename, waveform=waveform)
+        self.write('source{}:casset:waveform "{}"', channel, waveform)
+
+    @staticmethod
+    def create_waveform_mat(filename:str, names:Iterable[str],
+            data:Iterable[np.ndarray], sample_rates:Iterable[float]):
+        """ Creates MATLAB .mat file (version 7.3) containing waveforms.
+
+        Parameters:
+        -----------
+        filename: str
+            Name of .mat file
+        names: list of str
+            List of waveform names
+        data: list of 1d arrays
+            List of waveform data
+        sample_rates: list of floats
+            List of sampling rates in samples / second.
+        """
+        [path, filename] = os.path.split(filename)
+        if not path:
+            path = '.'
+
+        content = {}
+        for i, n in enumerate(names):
+            content[u'Waveform_Name_{}'.format(i+1)] = str(n)
+            content[u'Waveform_Data_{}'.format(i+1)] = np.asarray(data[i])
+            content[u'Waveform_Sampling_Rate_{}'.format(i+1)] = float(
+                sample_rates[i])
+
+        hdf5storage.write(content, path, filename, matlab_compatible=True,
+            store_python_metadata=False)
