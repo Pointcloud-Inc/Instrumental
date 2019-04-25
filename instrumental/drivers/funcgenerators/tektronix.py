@@ -802,7 +802,13 @@ class AWG_70000A(FunctionGenerator, VisaMixin):
         self.write('instrument:mode {}', valid_modes[mode.lower()])
 
     def set_vpp(self, vpp, channel=1):
+        # Set amplitude for function generator
         self.write('fgen:channel{}:amplitude:voltage {}', channel, vpp)
+
+        # Set amplitude for AWG
+        self.write('source{}:voltage:level:immediate:amplitude {}', channel, vpp)
+
+        self.wait_until_complete()
 
     def set_freq(self, freq, channel=1):
         self.write('fgen:channel{}:frequency {}', channel, freq)
