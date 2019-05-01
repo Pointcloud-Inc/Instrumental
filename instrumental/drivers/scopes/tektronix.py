@@ -578,6 +578,7 @@ class MSO_DPO_7000(StatScope):
     _INST_VISA_INFO_ = ('TEKTRONIX', ['DPO7354C',])
 
     datetime = TekScope._datetime
+    max_waveform_length = 10000000
 
     # TODO: generalize this and integrate into instrumental properly
     @staticmethod
