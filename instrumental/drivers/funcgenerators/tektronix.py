@@ -916,7 +916,7 @@ class AWG_70000A(FunctionGenerator, VisaMixin):
 
     def load_waveform(self, filename:str, waveform:str, channel=1,
             norm='keepoffset'):
-        self.load_waveform_file(filename, waveform=waveform)
+        self.load_waveform_file(filename, norm=norm, waveform=waveform)
         self.write('source{}:casset:waveform "{}"', channel, waveform)
 
     @staticmethod
