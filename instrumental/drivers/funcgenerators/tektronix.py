@@ -847,6 +847,50 @@ class AWG_70000A(FunctionGenerator, VisaMixin):
         }
         self.write('source{}:rmode {}', channel, valid_trigger[trigger])
 
+    def set_trigger_input(self, trig_input, channel=1):
+        valid_trig_input = {
+            'A': 'A',
+            'B': 'B',
+            'I': 'I'
+        }
+        self.write('source{}:tinput {}trigger', channel,
+            valid_trig_input[trig_input])
+
+    def set_trigger_level(self, level, trig_input='A'):
+        valid_trig_input = {
+            'A': 'A',
+            'B': 'B'
+        }
+        self.write('trigger:level {},{}trigger', float(level),
+            valid_trig_input[trig_input])
+
+    def set_trigger_mode(self, mode, trig_input='A'):
+        valid_mode = {
+            'synchronous': 'synchronous',
+            'asynchronous': 'asynchronous'
+        }
+        valid_trig_input = {
+            'A': 'A',
+            'B': 'B'
+        }
+        self.write('trigger:mode {},{}trigger', 
+            valid_mode[mode],
+            valid_trig_input[trig_input])
+
+    def set_trigger_slope(self, slope, trig_input='A'):
+        valid_slope = {
+            'positive': 'positive',
+            'negative': 'negative'
+        }
+        valid_trig_input = {
+            'A': 'A',
+            'B': 'B'
+        }
+        self.write('trigger:slope {},{}trigger', 
+            valid_slope[slope],
+            valid_trig_input[trig_input])
+
+
     def set_sample_rate(self, sample_rate):
         self.write('clock:srate {}', float(sample_rate))
 
