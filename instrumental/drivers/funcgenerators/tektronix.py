@@ -832,6 +832,18 @@ class AWG_70000A(FunctionGenerator, VisaMixin):
             valid_functypes[functype.lower()]
         )
 
+    def set_bit_depth(self, bit_depth, channel=1):
+        valid_bit_depth = {
+            8: 8,
+            9: 9,
+            10: 10
+        }
+        self.write(
+            'source{}:dac:resolution {}',
+            channel,
+            valid_bit_depth[bit_depth]
+        )
+
     def set_output(self, output, channel=1):
         valid_outputs = {
             True: 'on',
@@ -889,7 +901,6 @@ class AWG_70000A(FunctionGenerator, VisaMixin):
         self.write('trigger:slope {},{}trigger', 
             valid_slope[slope],
             valid_trig_input[trig_input])
-
 
     def set_sample_rate(self, sample_rate):
         self.write('clock:srate {}', float(sample_rate))
@@ -965,7 +976,9 @@ class AWG_70000A(FunctionGenerator, VisaMixin):
 
     @staticmethod
     def create_waveform_mat(filename:str, names:Iterable[str],
-            data:Iterable[np.ndarray], sample_rates:Iterable[float]):
+            data:Iterable[np.ndarray], sample_rates:Iterable[float],
+            marker1:Iterable[np.ndarray]=None,
+            marker2:Iterable[np.ndarray]=None):
         """ Creates MATLAB .mat file (version 7.3) containing waveforms.
 
         Parameters:
@@ -978,6 +991,10 @@ class AWG_70000A(FunctionGenerator, VisaMixin):
             List of waveform data
         sample_rates: list of floats
             List of sampling rates in samples / second.
+        marker1 (optional): list of 1d arrays
+            List of marker 1 data
+        marker2 (optional): list of 1d arrays
+            List of marker 2 data
         """
         [path, filename] = os.path.split(filename)
         if not path:
@@ -989,6 +1006,13 @@ class AWG_70000A(FunctionGenerator, VisaMixin):
             content[u'Waveform_Data_{}'.format(i+1)] = np.asarray(data[i])
             content[u'Waveform_Sampling_Rate_{}'.format(i+1)] = float(
                 sample_rates[i])
+
+            if marker1:
+                content[u'Waveform_M1_{}'.format(i+1)] = np.asarray(
+                    marker1[i], dtype=np.uint8)
+            if marker2:
+                content[u'Waveform_M2_{}'.format(i+1)] = np.asarray(
+                    marker2[i], dtype=np.uint8)
 
         hdf5storage.write(content, path, filename, matlab_compatible=True,
             store_python_metadata=False)
