@@ -247,7 +247,7 @@ class TekScope(Scope, VisaMixin):
 
     def _read_curve(self, width):
         with self.resource.ignore_warning(visa.constants.VI_SUCCESS_MAX_CNT),\
-            visa_context(self.resource, timeout=10000, read_termination=None,
+            visa_context(self.resource, timeout=300, read_termination=None,
                          end_input=visa.constants.SerialTermination.none):
 
             self.write("curve?")
