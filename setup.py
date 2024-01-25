@@ -18,6 +18,7 @@ classifiers = [
 
 # Load metadata from __about__.py
 base_dir = os.path.dirname(__file__)
+print(base_dir)
 about = {}
 with open(os.path.join(base_dir, 'instrumental', '__about__.py')) as f:
     exec(f.read(), about)
@@ -96,7 +97,7 @@ if __name__ == '__main__':
         author = about['__author__'],
         author_email = about['__email__'],
         description = description,
-        long_description = '\n'.join(open("README.rst").read().splitlines()[2:]),
+        long_description = '\n'.join(open(base_dir+"\README.rst").read().splitlines()[2:]),
         url = about['__url__'],
         license = about['__license__'],
         classifiers = classifiers,
