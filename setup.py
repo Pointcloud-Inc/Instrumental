@@ -9,11 +9,11 @@ description = "Library with high-level drivers for lab equipment"
 classifiers = [
     'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
     'Intended Audience :: Science/Research',
-    'Programming Language :: Python :: 2',
-    'Programming Language :: Python :: 2.7',
     'Programming Language :: Python :: 3',
-    'Programming Language :: Python :: 3.5',
-    'Programming Language :: Python :: 3.6',
+    'Programming Language :: Python :: 3.7',
+    'Programming Language :: Python :: 3.8',
+    'Programming Language :: Python :: 3.9',
+    'Programming Language :: Python :: 3.10',
 ]
 
 # Load metadata from __about__.py
@@ -85,6 +85,10 @@ class GenerateCommand(distutils.cmd.Command):
 
 
 if __name__ == '__main__':
+    with open('README.rst') as f:
+        readme_txt = f.read()
+    desc = 'Instrumental\n============\n' + readme_txt.partition('====\n')[-1]
+
     setup(
         name = about['__distname__'],
         version = about['__version__'],
@@ -96,7 +100,8 @@ if __name__ == '__main__':
         author = about['__author__'],
         author_email = about['__email__'],
         description = description,
-        long_description = '\n'.join(open("README.rst").read().splitlines()[2:]),
+        long_description = desc,
+        long_description_content_type = 'text/x-rst',
         url = about['__url__'],
         license = about['__license__'],
         classifiers = classifiers,

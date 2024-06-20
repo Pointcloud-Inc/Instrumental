@@ -146,6 +146,7 @@ class NiceNI(NiceLib):
         GetAOUseOnlyOnBrdMem = Sig('in', 'in', 'out')
         SetAOUseOnlyOnBrdMem = Sig('in', 'in', 'in')
         GetBufInputOnbrdBufSize = Sig('in', 'out')
+        SetWriteRegenMode = Sig('in', 'in')
 
         _sigs_ = sig_pattern((
             ('Get{}', Sig('in', 'out')),
@@ -461,7 +462,7 @@ class Task(object):
     def __init__(self, *channels):
         """Create a task that uses the given channels.
 
-        Each arg can either be a Channel or a tuple of (Channel, name_str)
+        Each arg can either be a Channel or a tuple of (Channel, path_str)
         """
         self._trig_set_up = False
         self.fsamp = None
@@ -476,18 +477,23 @@ class Task(object):
         for arg in channels:
             if isinstance(arg, Channel):
                 channel = arg
-                name = channel.name
+                path = channel.path
             else:
-                channel, name = arg
+                channel, path = arg
 
-            if name in self.channels:
-                raise Exception("Duplicate channel name {}".format(name))
+            daq_name = channel.daq.name
+            if daq_name not in self._mtasks:
+                self._mtasks[daq_name] = {}
 
-            if channel.type not in self._mtasks:
-                self._mtasks[channel.type] = MiniTask(channel.daq, channel.type)
+            if path in self.channels:
+                raise Exception("Duplicate channel name {}".format(path))
 
-            self.channels[name] = channel
-            channel._add_to_minitask(self._mtasks[channel.type])
+            if channel.type not in self._mtasks[daq_name]:
+                self._mtasks[daq_name][channel.type] = MiniTask(
+                    channel.daq, channel.type)
+
+            self.channels[path] = channel
+            channel._add_to_minitask(self._mtasks[daq_name][channel.type])
 
             TYPED_CHANNELS[channel.type].append(channel)
         self._setup_master_channel()
@@ -496,16 +502,16 @@ class Task(object):
         self.master_clock = ''
         self.master_trig = ''
         self.master_type = None
+        # pick any device to use as master
+        devname = next(iter(self._mtasks))
         for ch_type in ['AI', 'AO', 'DI', 'DO']:
-            if ch_type in self._mtasks:
-                devname = ''
-                for ch in self.channels.values():
-                    if ch.type == ch_type:
-                        devname = ch.daq.name
-                        break
-                self.master_clock = '/{}/{}/SampleClock'.format(devname, ch_type.lower())
-                self.master_trig = '/{}/{}/StartTrigger'.format(devname, ch_type.lower())
+            if ch_type in self._mtasks[devname]:
+                self.master_clock = '/{}/{}/SampleClock'.format(
+                    devname, ch_type.lower())
+                self.master_trig = '/{}/{}/StartTrigger'.format(
+                    devname, ch_type.lower())
                 self.master_type = ch_type
+                self.master_device = devname
                 break
 
     @check_enums(mode=SampleMode, edge=EdgeSlope)
@@ -518,12 +524,14 @@ class Task(object):
             self.n_samples = 1
         elif num_args_specified == 2:
             self.fsamp, self.n_samples = handle_timing_params(duration, fsamp, n_samples)
-            for ch_type, mtask in self._mtasks.items():
-                if clock is not None:
-                    ch_clock = clock
-                else:
-                    ch_clock = self.master_clock if ch_type != self.master_type else ''
-                mtask.config_timing(self.fsamp, self.n_samples, mode, self.edge, ch_clock)
+            for dev_mtasks in self._mtasks.values():
+                for ch_type, mtask in dev_mtasks.items():
+                    if clock is not None:
+                        ch_clock = clock
+                    else:
+                        ch_clock = self.master_clock if ch_type != self.master_type else ''
+                    mtask.config_timing(self.fsamp, self.n_samples,
+                                        mode, self.edge, ch_clock)
         else:
             raise ValueError("Must specify 0 or 2 of duration, fsamp, and n_samples")
 
@@ -545,8 +553,10 @@ class Task(object):
             samples from right before the trigger, and 80 from right after it.
         """
         # TODO: Verify that this is right for multi-tasks
-        for ch_type, mtask in self._mtasks.items():
-            mtask.config_digital_edge_trigger(source, edge, n_pretrig_samples)
+        for dev_mtasks in self._mtasks.values():
+            for mtask in dev_mtasks.values():
+                mtask.config_digital_edge_trigger(
+                    source, edge, n_pretrig_samples)
 
     def _setup_triggers(self):
         # TODO: Decide if/when this should ever be used. At least on M-Series DAQs, there is no need
@@ -554,9 +564,11 @@ class Task(object):
         # linked to the analog *clock*. Therefore, this is probably only useful if you want to (and
         # *can*) use separate clocks while still starting the tasks simultaneously. Maybe this is
         # *the case for simultaneous AI and AO tasks?
-        for ch_type, mtask in self._mtasks.items():
-            if ch_type != self.master_type:
-                mtask._mx_task.CfgDigEdgeStartTrig(self.master_trig, self.edge.value)
+        for devname, dev_mtasks in self._mtasks.items():
+            for ch_type, mtask in dev_mtasks.items():
+                if not (ch_type == self.master_type and devname == self.master_device):
+                    mtask._mx_task.CfgDigEdgeStartTrig(
+                        self.master_trig, self.edge.value)
         self._trig_set_up = True
 
     def run(self, write_data=None):
@@ -575,6 +587,7 @@ class Task(object):
         try:
             read_data = self.read()
         finally:
+            self.wait_until_done()
             self.stop()
 
         return read_data
@@ -610,8 +623,9 @@ class Task(object):
         This transitions all subtasks to the `verified` state. See the NI documentation for details
         on the Task State model.
         """
-        for mtask in self._mtasks.values():
-            mtask.verify()
+        for dev_mtasks in self._mtasks.values():
+            for mtask in dev_mtasks.values():
+                mtask.verify()
 
     def reserve(self):
         """Reserve the Task.
@@ -619,8 +633,9 @@ class Task(object):
         This transitions all subtasks to the `reserved` state. See the NI documentation for details
         on the Task State model.
         """
-        for mtask in self._mtasks.values():
-            mtask.reserve()
+        for dev_mtasks in self._mtasks.values():
+            for mtask in dev_mtasks.values():
+                mtask.reserve()
 
     def unreserve(self):
         """Unreserve the Task.
@@ -628,8 +643,9 @@ class Task(object):
         This transitions all subtasks to the `verified` state. See the NI documentation for details
         on the Task State model.
         """
-        for mtask in self._mtasks.values():
-            mtask.unreserve()
+        for dev_mtasks in self._mtasks.values():
+            for mtask in dev_mtasks.values():
+                mtask.unreserve()
 
     def abort(self):
         """Abort the Task.
@@ -637,8 +653,9 @@ class Task(object):
         This transitions all subtasks to the `verified` state. See the NI documentation for details
         on the Task State model.
         """
-        for mtask in self._mtasks.values():
-            mtask.abort()
+        for dev_mtasks in self._mtasks.values():
+            for mtask in dev_mtasks.values():
+                mtask.abort()
 
     def commit(self):
         """Commit the Task.
@@ -646,8 +663,9 @@ class Task(object):
         This transitions all subtasks to the `committed` state. See the NI documentation for details
         on the Task State model.
         """
-        for mtask in self._mtasks.values():
-            mtask.commit()
+        for dev_mtasks in self._mtasks.values():
+            for mtask in dev_mtasks.values():
+                mtask.commit()
 
     def start(self):
         """Start the Task.
@@ -655,10 +673,12 @@ class Task(object):
         This transitions all subtasks to the `running` state. See the NI documentation for details
         on the Task State model.
         """
-        for ch_type, mtask in self._mtasks.items():
-            if ch_type != self.master_type:
-                mtask.start()
-        self._mtasks[self.master_type].start()  # Start the master last
+        for devname, dev_mtasks in self._mtasks.items():
+            for ch_type, mtask in dev_mtasks.items():
+                if not (ch_type == self.master_type and devname == self.master_device):
+                    mtask.start()
+        # Start the master last
+        self._mtasks[self.master_device][self.master_type].start()
 
     def stop(self):
         """Stop the Task and return it to the state it was in before it started.
@@ -667,73 +687,92 @@ class Task(object):
         to an explicit `start()` or a call to `write()` with `autostart` set to True. See the NI
         documentation for details on the Task State model.
         """
-        self._mtasks[self.master_type].stop()  # Stop the master first
-        for ch_type, mtask in self._mtasks.items():
-            if ch_type != self.master_type:
-                mtask.stop()
+        self._mtasks[self.master_device][self.master_type].stop(
+        )  # Stop the master first
+        for devname, dev_mtasks in self._mtasks.items():
+            for ch_type, mtask in dev_mtasks.items():
+                if not (ch_type == self.master_type and devname == self.master_device):
+                    mtask.stop()
 
     def clear(self):
         """Clear the task and release its resources.
 
         This clears all subtasks and releases their resources, aborting them first if necessary.
         """
-        for mtask in self._mtasks.values():
-            mtask.clear()
+        for dev_mtasks in self._mtasks.values():
+            for ch_type, mtask in dev_mtasks.items():
+                mtask.clear()
 
     @property
     def is_done(self):
-        return all(mtask.is_done for mtask in self._mtasks.values())
+        return all(mtask.is_done for dev_mtasks in self._mtasks.values() for mtask in dev_mtasks.values())
 
     def wait_until_done(self, timeout=None):
         """Wait until the task is done"""
         # Only wait for one task, since they should all finish at the same time... I think
-        mtask = next(iter(self._mtasks.values()))
+        dev_mtasks = next(iter(self._mtasks.values()))
+        mtask = next(iter(dev_mtasks.values()))
         mtask.wait_until_done(timeout)
 
     def _read_AI_channels(self, timeout_s):
         """ Returns a dict containing the AI buffers. """
-        if 'AI' not in self._mtasks:
+        if len(self.AIs)==0:
             return {}
-        is_scalar = self.fsamp is None
-        mx_task = self._mtasks['AI']._mx_task
-        buf_size = self.n_samples * len(self.AIs)
-        data, n_samps_read = mx_task.ReadAnalogF64(-1, timeout_s, Val.GroupByChannel, buf_size)
+        res={}
+        is_scalar=self.fsamp is None
+        for dev_mtasks in self._mtasks.values():
+            if 'AI' not in dev_mtasks:
+                continue
+            mx_task = dev_mtasks['AI']._mx_task
+            buf_size = self.n_samples * len(self.AIs)
+            data, n_samps_read = mx_task.ReadAnalogF64(
+                -1, timeout_s, Val.GroupByChannel, buf_size)
 
-        res = {}
-        for i, ch in enumerate(self.AIs):
-            start = i * n_samps_read
-            stop = (i + 1) * n_samps_read
-            ch_data = data[start:stop] if not is_scalar else data[start]
-            res[ch.path] = Q_(ch_data, 'V')
+            for i, ch in enumerate(self.AIs):
+                start = i * n_samps_read
+                stop = (i + 1) * n_samps_read
+                ch_data=data[start:stop] if not is_scalar else data[start]
+                res[ch.path]=Q_(ch_data, 'V')
 
         if is_scalar:
             res['t'] = Q_(0., 's')
         else:
-            end_t = (n_samps_read-1)/self.fsamp.m_as('Hz') if self.fsamp is not None else 0
+            end_t = (n_samps_read - 1) / self.fsamp.m_as('Hz') if self.fsamp is not None else 0
             res['t'] = Q_(np.linspace(0., end_t, n_samps_read), 's')
         return res
 
     def _write_AO_channels(self, data, autostart=True):
-        if 'AO' not in self._mtasks:
-            return
-        mx_task = self._mtasks['AO']._mx_task
-        ao_names = [name for (name, ch) in self.channels.items() if ch.type == 'AO']
-        arr = np.concatenate([Q_(data[ao]).to('V').magnitude for ao in ao_names])
-        arr = arr.astype(np.float64)
-        n_samps_per_chan = len(list(data.values())[0].magnitude)
-        mx_task.WriteAnalogF64(n_samps_per_chan, autostart, -1., Val.GroupByChannel, arr)
+        if len(self.AOs) == 0:
+            return {}
 
+        for dev_name, dev_mtasks in self._mtasks.items():
+            if 'AO' not in dev_mtasks:
+                continue
+            mx_task = dev_mtasks['AO']._mx_task
+
+            ao_names = [name for (name, ch)
+                        in self.channels.items() if ch.type == 'AO' and ch.daq.name == dev_name]
+            arr = np.concatenate(
+                [Q_(data[ao]).to('V').magnitude for ao in ao_names]).astype(np.float64)
+            n_samps_per_chan = len(list(data.values())[0].magnitude)
+            mx_task.WriteAnalogF64(
+                n_samps_per_chan, autostart, -1., Val.GroupByChannel, arr)
+
+    # TODO: need to test this
     def _write_DO_channels(self, data, autostart=True):
         if 'DO' not in self._mtasks:
             return
-        mx_task = self._mtasks['DO']._mx_task
-        # TODO: add check that input data is the right length
-        arr = np.fromiter((ch._create_DO_int(value)
-                           for (ch_name, ch) in self.channels.items() if ch.type == 'DO'
-                           for value in data[ch_name]),
-                          dtype='uint32')
-        n_samps_per_chan = len(list(data.values())[0])
-        mx_task.WriteDigitalU32(n_samps_per_chan, autostart, -1, Val.GroupByChannel, arr)
+        for dev_name, dev_mtasks in self._mtasks.items():
+            if 'DO' not in dev_mtasks:
+                continue
+            mx_task = dev_mtasks['DO']._mx_task
+            # TODO: add check that input data is the right length
+            arr = np.fromiter((ch._create_DO_int(value)
+                               for (ch_name, ch) in self.channels.items() if ch.type == 'DO'
+                               for value in data[ch_name]),
+                              dtype='uint32')
+            n_samps_per_chan = len(list(data.values())[0])
+            mx_task.WriteDigitalU32(n_samps_per_chan, autostart, -1, Val.GroupByChannel, arr)
 
     def __enter__(self):
         return self

@@ -215,25 +215,32 @@ class Instrument(with_metaclass(InstrumentMeta, object)):
     @classmethod
     def _create(cls, paramset, **other_attrs):
         """Factory method meant to be used by `instrument()`"""
+        log.debug('Calling _create()')
+        cls_paramset = ParamSet(cls, **paramset)
+
+        matching_insts = [open_inst for open_inst in cls._instances
+                          if cls_paramset.matches(open_inst._paramset)]
+        if matching_insts:
+            if _REOPEN_POLICY == 'strict':
+                raise InstrumentExistsError(
+                    "Device instance already exists, cannot open in strict mode. Use a reopen "
+                    "policy of 'reuse' or 'new' if other behavior is desired. See the Instrumental "
+                    "docs for more information")
+            elif _REOPEN_POLICY == 'reuse':
+                # TODO: Should we return something other than the first element?
+                log.info('Reopen Policy is "reuse": returning existing instrument')
+                return matching_insts[0]
+            elif _REOPEN_POLICY == 'new':
+                log.info('Reopen Policy is "new": creating new instance')
+                pass  # Cross our fingers and try to open a new instance
+
         obj = object.__new__(cls)  # Avoid our version of __new__
         for name, value in other_attrs.items():
             setattr(obj, name, value)
-        obj._paramset = ParamSet(cls, **paramset)
-
-        matching_insts = [open_inst for open_inst in obj._instances
-                          if obj._paramset.matches(open_inst._paramset)]
-        if matching_insts:
-            if _REOPEN_POLICY == 'strict':
-                raise InstrumentExistsError("Device instance already exists, cannot open in strict "
-                                            "mode")
-            elif _REOPEN_POLICY == 'reuse':
-                # TODO: Should we return something other than the first element?
-                return matching_insts[0]
-            elif _REOPEN_POLICY == 'new':
-                pass  # Cross our fingers and try to open a new instance
-
+        obj._paramset = cls_paramset
         obj._before_init()
         obj._fill_out_paramset()
+        log.debug('Calling _initialize()')
         obj._initialize(**paramset.get('settings', {}))
         obj._after_init()
         return obj
@@ -249,6 +256,7 @@ class Instrument(with_metaclass(InstrumentMeta, object)):
 
     def _before_init(self):
         """Called just before _initialize"""
+        log.debug('Calling _before_init()')
         self._driver_name = driver_submodule_name(self.__class__.__module__)
         # TODO: consider setting the _module at the class level
         if not hasattr(self.__class__, '_module'):
@@ -259,6 +267,7 @@ class Instrument(with_metaclass(InstrumentMeta, object)):
 
     def _after_init(self):
         """Called just after _initialize"""
+        log.debug('Calling _after_init()')
         cls = self.__class__
 
         # Only add the instrument after init, to ensure it hasn't failed to open
@@ -266,6 +275,7 @@ class Instrument(with_metaclass(InstrumentMeta, object)):
         self._instances.add(self)
 
     def _fill_out_paramset(self):
+        log.debug('Calling _fill_out_paramset()')
         # TODO: Fix the _INST_ system more fundamentally and remove this hack
         if hasattr(self, '_INST_PARAMS_'):
             mod_params = self._INST_PARAMS_
@@ -447,7 +457,7 @@ class VisaMixin(Instrument):
     def write(self, message, *args, **kwds):
         """Write a string message to the instrument's VISA resource
 
-        Calls format(*args, **kwds) to format the message. This allows for clean inclusion of
+        Calls ``format(*args, **kwds)`` to format the message. This allows for clean inclusion of
         parameters. For example:
 
         >>> inst.write('source{}:value {}', channel, value)
@@ -528,12 +538,12 @@ def open_visa_inst(visa_address, raise_errors=False):
 
     Logs well-known errors, and also suppress them if raise_errors is False.
     """
-    import visa
-    rm = visa.ResourceManager()
+    import pyvisa
+    rm = pyvisa.ResourceManager()
     try:
         log.info("Opening VISA resource '{}'".format(visa_address))
         visa_inst = rm.open_resource(visa_address, open_timeout=50, timeout=200)
-    except visa.VisaIOError as e:
+    except pyvisa.VisaIOError as e:
         # Could not create visa instrument object
         log.info("Skipping this resource due to VisaIOError")
         log.info(e)
@@ -552,9 +562,9 @@ def open_visa_inst(visa_address, raise_errors=False):
 
 
 def gen_visa_instruments():
-    import visa
+    import pyvisa
     prev_addr = 'START'
-    rm = visa.ResourceManager()
+    rm = pyvisa.ResourceManager()
     visa_list = rm.list_resources()
     for addr in visa_list:
         if addr.startswith(prev_addr):
@@ -662,10 +672,10 @@ def list_instruments(server=None, module=None, blacklist=None):
     inst_list = []
     if check_visa:
         try:
-            import visa
+            import pyvisa
             try:
                 inst_list.extend(list_visa_instruments())
-            except visa.VisaIOError:
+            except pyvisa.VisaIOError:
                 pass  # Hide visa errors
         except (ImportError, ConfigError):
             pass  # Ignore if PyVISA not installed or configured
@@ -701,7 +711,7 @@ def _get_visa_instrument(params):
     Returns the VISA instrument corresponding to 'visa_address'. Uses caching
     to avoid multiple network accesses.
     """
-    import visa
+    import pyvisa
 
     if 'visa_address' not in params:
         raise InstrumentTypeError()
@@ -717,11 +727,11 @@ def _get_visa_instrument(params):
                                           addr + "' not found!")
     else:
         try:
-            rm = visa.ResourceManager()
+            rm = pyvisa.ResourceManager()
             visa_inst = rm.open_resource(addr, open_timeout=50, **kwds)
             # Cache the instrument for possible later use
             params['**visa_instrument'] = visa_inst
-        except visa.VisaIOError:
+        except pyvisa.VisaIOError:
             # Cache the fact that the instrument isn't connected
             params['**visa_instrument'] = None
             raise InstrumentNotFoundError("Error: device with address '" +
@@ -780,7 +790,7 @@ def get_idn(inst):
 
     Returns (None, None) if unsuccessful.
     """
-    import visa
+    import pyvisa
     try:
         idn = inst.query("*IDN?")
         log.info("*IDN? gives '{}'".format(idn.strip()))
@@ -788,7 +798,7 @@ def get_idn(inst):
         log.info("UnicodeDecodeError while getting IDN. Probably a non-Visa Serial device")
         log.info(str(e))
         return None, None
-    except visa.VisaIOError as e:
+    except pyvisa.VisaIOError as e:
         log.info("Getting IDN failed due to VisaIOError")
         log.info(str(e))
         return None, None
@@ -872,8 +882,8 @@ def find_matching_drivers(in_params):
 
 
 def find_visa_instrument(params):
-    import visa
-    rm = visa.ResourceManager()
+    import pyvisa
+    rm = pyvisa.ResourceManager()
     visa_address = params['visa_address']
 
     if 'module' in params:
@@ -998,11 +1008,15 @@ def find_nonvisa_instrument(params):
                             "{}.".format(params, params['module']))
 
         classnames = driver_info[params['module']]['classes']
-        for classname in classnames:
-            try:
-                return create_instrument(driver_module, classname, normalized_params)
-            except (InstrumentTypeError, InstrumentNotFoundError):
-                log.info("Failed to create instrument using '%s'", classname)
+        if 'classname' in params:  #force the instrument factory to use the defined class
+            if params['classname'] in classnames:
+                return create_instrument(driver_module, params['classname'], normalized_params)
+        else:  # else try one of the ones defined in driver_info until it works
+            for classname in classnames:
+                try:
+                    return create_instrument(driver_module, classname, normalized_params)
+                except (InstrumentTypeError, InstrumentNotFoundError):
+                    log.info("Failed to create instrument using '%s'", classname)
 
         raise Exception("Could not open non-VISA instrument. Driver module '{}' is missing "
                         "_instrument function, and the listed instrument classes {} "
@@ -1113,7 +1127,7 @@ def instrument(inst=None, **kwargs):
     if isinstance(inst, Instrument):
         return inst
 
-    with _reopen_context(kwargs.pop('reopen_policy', 'reuse')):
+    with _reopen_context(kwargs.pop('reopen_policy', 'strict')):
         params, alias = _extract_params(inst, kwargs)
 
         if 'server' in params:

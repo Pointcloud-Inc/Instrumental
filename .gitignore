@@ -3,9 +3,13 @@
 *.cpython-35.pyc.[0-9]*
 *.pyo
 *.swp
+.idea/*
 
 _*lib.py
 !_*midlib.py
+
+__pycache__
+.pytest_cache
 
 /bin/
 /build/
@@ -19,3 +23,8 @@ _*lib.py
 Release/
 errortext.c
 errortext.pyd
+errortext.*.pyd
+
+*lextab.py
+*yacctab.py
+

@@ -1,9 +1,10 @@
 language: python
 
 python:
-  - "2.7"
-  - "3.5"
-  - "3.6"
+  - "3.7"
+  - "3.8"
+  - "3.9"
+  - "3.10"
 
 install:
   - pip install .
@@ -19,4 +20,5 @@ deploy:
   distributions: "sdist bdist_wheel"
   on:
     tags: true
-    python: "3.6"
+    python: "3.7"
+    skip_existing: true

@@ -3,6 +3,11 @@
 """
 Driver for Photometrics cameras.
 """
+import warnings
+warnings.warn(
+    "Driver {!r} is out of date and incompatible with the current Instrumental core. "
+    "Pull requests fixing this are welcome.".format(__name__)
+)
 
 import time
 import os.path
@@ -14,6 +19,7 @@ from .. import _ParamDict
 from ..util import check_units
 from ...errors import InstrumentTypeError, InstrumentNotFoundError
 from ... import Q_, u
+
 
 __all__ = ['PVCam']
 

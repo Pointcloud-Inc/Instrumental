@@ -72,11 +72,11 @@ class Camera(Instrument):
         exposure immediately or ready the camera to start on an explicit (hardware or software)
         trigger.
 
-        It can be useful to invoke ``capture()`` and ``get_captured_image()`` explicitly if you
-        expect the capture sequence to take a long time and you'd like to perform some operations
-        while you wait for the camera::
+        It can be useful to invoke ``start_capture()`` and ``get_captured_image()`` explicitly if
+        you expect the capture sequence to take a long time and you'd like to perform some
+        operations while you wait for the camera::
 
-            >>> cam.capture()
+            >>> cam.start_capture()
             >>> do_other_useful_stuff()
             >>> arr = cam.get_captured_image()
 
@@ -233,12 +233,12 @@ class Camera(Instrument):
             elif kwds[names[3]] is not None:  # Right given
                 kwds[names[2]] = 0
             elif kwds[names[1]] is not None:  # Center given
-                if kwds[names[1]] > max_width/2:
+                if kwds[names[1]] > max_width//2:
                     kwds[names[3]] = max_width  # Bounded by the right
                 else:
                     kwds[names[2]] = 0  # Bounded by the left
             else:  # Width given
-                kwds[names[1]] = max_width/2  # Centered
+                kwds[names[1]] = max_width//2  # Centered
         elif n_args != 2:
             raise ValueError("Only two of {} should be provided".format(names))
 
@@ -253,14 +253,14 @@ class Camera(Instrument):
         if left is not None:
             if right is not None:
                 width = right - left
-                cx = left + width/2
+                cx = left + width//2
             elif cx is not None:
                 # Assume an even width
                 right = cx + (cx - left)
                 width = right - left
             elif width is not None:
                 right = left + width
-                cx = left + width/2
+                cx = left + width//2
         elif right is not None:
             if cx is not None:
                 # Assume an even width
@@ -268,9 +268,9 @@ class Camera(Instrument):
                 left = right - width
             elif width is not None:
                 left = right - width
-                cx = left + width/2
+                cx = left + width//2
         else:
-            left = cx - width/2
+            left = cx - width//2
             right = left + width
 
         kwds.update(zip(names, (width, cx, left, right)))

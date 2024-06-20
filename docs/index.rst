@@ -1,4 +1,5 @@
-.. image:: ../images/logo.png
+.. image:: ../images/logo.svg
+    :class: logo
     :align: right
 
 Instrumental
@@ -7,6 +8,9 @@ Instrumental
 Instrumental is a Python-based library for controlling lab hardware like cameras, DAQs,
 oscilloscopes, spectrometers, and more. It has high-level drivers for instruments from NI,
 Tektronix, Thorlabs, PCO, Photometrics, Burleigh, and others.
+
+.. NOTE::
+    As of version 0.7, Instrumental has dropped support for Python 2 and now requires Python 3.7+.
 
 Instrumental's goal is to make common tasks simple to perform, while still providing the
 flexibility to perform complex tasks with relative ease. It also makes it easy to mess around with
@@ -46,7 +50,7 @@ lab equipment.
 To download Instrumental or browse its source, see our `GitHub page
 <https://github.com/mabuchilab/Instrumental>`_.
 
-You can cite Instrumental through Zenodo (DOI: 10.5281/zenodo.2556399).
+You can cite Instrumental through Zenodo (DOI: `10.5281/zenodo.2556398 <https://doi.org/10.5281/zenodo.2556398>`_).
 
 .. NOTE::
     Instrumental is currently still under heavy development, so its interfaces

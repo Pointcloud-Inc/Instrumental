@@ -14,8 +14,8 @@
    :target: https://instrumental-lib.readthedocs.io
    :alt: Documentation
 
-.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.2556399.svg
-   :target: https://doi.org/10.5281/zenodo.2556399
+.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.2556398.svg
+   :target: https://doi.org/10.5281/zenodo.2556398
 
 
 |logo| Instrumental
@@ -24,6 +24,9 @@
 Instrumental is a Python-based library for controlling lab hardware like cameras, DAQs,
 oscilloscopes, spectrometers, and more. It has high-level drivers for instruments from NI,
 Tektronix, Thorlabs, PCO, Photometrics, Burleigh, and others.
+
+ **Note**
+ As of version 0.7, Instrumental has dropped support for Python 2 and now requires Python 3.7+
 
 Instrumental's goal is to make common tasks simple to perform, while still providing the
 flexibility to perform complex tasks with relative ease. It also makes it easy to mess around with
@@ -49,6 +52,7 @@ Then you can simply open it by name::
 
 Instrumental also bundles in some additional support code, including:
 
+* A server-client implementation for controlling instruments from remote machines
 * Plotting and curve fitting utilities
 * Utilities for acquiring and organizing data
 
@@ -62,4 +66,4 @@ For install information, documentation, examples, and more, see our page on
 .. |logo| image:: images/logo-small.png
           :alt: Instrumental
 
-If you would like to cite Instrumental, to give it more visibility to other researchers, you can cite the repository through Zenodo (DOI: 10.5281/zenodo.2556399).
+If you would like to cite Instrumental, to give it more visibility to other researchers, you can cite the repository through Zenodo (DOI: `10.5281/zenodo.2556398 <https://doi.org/10.5281/zenodo.2556398>`_).

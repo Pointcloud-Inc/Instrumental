@@ -20,7 +20,7 @@ import time
 
 from . import PowerMeter
 from .. import Facet, MessageFacet, VisaMixin, deprecated
-from ..util import visa_timeout_context
+from ..util import pyvisa_timeout_context
 from ... import Q_, u
 
 
@@ -186,7 +186,7 @@ class Newport_1830_C(PowerMeter, VisaMixin):
         val = self.write('A?')
         return bool(val)
 
-    def get_valid_power(self, max_attempts=10, polling_interval=0.1*u.s)):
+    def get_valid_power(self, max_attempts=10, polling_interval=0.1*u.s):
         """Returns a valid power reading
 
         This convience function will try to measure a valid power up to a

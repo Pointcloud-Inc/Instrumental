@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 Nate Bogdanowicz
+# Copyright 2019 Jonathan Wheeler, Christopher Zee
 """
-Driver module for Agilent MXG signal generators. Initially developed for and tested onthe N5181A.
+Driver module for Rigol signal generators.
 """
-from enum import Enum
-from . import FunctionGenerator
-from .. import VisaMixin, SCPI_Facet
-from ... import u, Q_
-from .. import ParamSet
 from enum import Enum, auto
-from visa import ResourceManager
+
+from pyvisa import ResourceManager
+
+from .. import ParamSet, SCPI_Facet, VisaMixin
+from . import FunctionGenerator
 
 _INST_PARAMS = ['visa_address']
 _INST_VISA_INFO = {
@@ -18,22 +17,20 @@ _INST_VISA_INFO = {
 
 MANUFACTURER_ID = 0x1AB1
 
+
 class SpecTypes(Enum):
     DG811 = 0x0643
+
 
 class Waveform(Enum):
     PULSe = auto()
 
+
 def list_instruments():
     """Get a list of all spectrometers currently attached"""
     paramsets = []
-    model_string = ''
-
-    for spec in SpecTypes:
-        model_string += '(VI_ATTR_MODEL_CODE==0x{:04X}) || '.format(spec.value)
-    model_string = model_string.rstrip(' || ')
-    search_string = "USB?*?{{VI_ATTR_MANF_ID==0x{:04X} && ({})}}".format(MANUFACTURER_ID, model_string)
-
+    model_string = '|'.join('{:04X}'.format(spec.value) for spec in SpecTypes)
+    search_string = "USB[0-9]*::0x{:04X}::0x({})".format(MANUFACTURER_ID, model_string)
     rm = ResourceManager()
 
     try:
@@ -48,13 +45,16 @@ def list_instruments():
 
     return paramsets
 
+
 class RigolFunctionGenerator(FunctionGenerator, VisaMixin):
     def _initialize(self):
         self._rsrc.read_termination = '\n'
 
+
 class OnOffState(Enum):
     ON = True
     OFF = False
+
 
 class DG800(RigolFunctionGenerator, VisaMixin):
     frequency1 = SCPI_Facet('SOURce1:FREQuency', convert=float, units='Hz')
@@ -108,18 +108,18 @@ class DG800(RigolFunctionGenerator, VisaMixin):
     def output2(self):
         val = self.query('OUTPut2:STATe?')
         return OnOffState[val].value
-    
+
     @output2.setter
     def output2(self, val):
         val = int(bool(val))
         self.write('OUTPut2:STATe %s' % OnOffState(val).name)
 
     def align(self):
-        # /*Executes an align phase operation on CH1.*/        
-        self._rsrc.write(':SOUR1:PHAS:INIT') 
+        # /*Executes an align phase operation on CH1.*/
+        self._rsrc.write(':SOUR1:PHAS:INIT')
 
         # /*Executes an align phase operation on CH2.*/
-        # :SOUR2:PHAS:SYNC        
+        # :SOUR2:PHAS:SYNC
 
     def apply1(self, waveform, frequency=None, amplitude=None, offset=None, phase=None):
         self.write('SOURce1:APPLy:{} {},{},{},{}'.format(Waveform(waveform).name, frequency, amplitude, offset, phase))

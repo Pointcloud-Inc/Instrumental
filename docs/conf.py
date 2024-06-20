@@ -53,11 +53,14 @@ class Mock(object):
         # Don't use type magic b/c it messes some things up
         if name in ('__file__', '__path__'):
             return '/dev/null'
+        if name in ('__mro_entries__',):
+            raise AttributeError
         else:
             return Mock()
 
-# Include ctypes due to Windows-specific imports
-MOCK_MODULES = ['numpy', 'numpy.ctypeslib','scipy', 'scipy.special', 'scipy.interpolate',
+# Include ctypes due to Windows-specific imports. This forces us to also mock numpy.cytypeslib to
+# avoid a RecursionError.
+MOCK_MODULES = ['numpy.ctypeslib','scipy', 'scipy.special', 'scipy.interpolate',
                 'scipy.optimize', 'matplotlib', 'matplotlib.pyplot', 'matplotlib.widgets',
                 'matplotlib.transforms', 'matplotlib.cbook', 'ctypes', 'ctypes.wintypes', 'visa',
                 'pyvisa', 'pyvisa.constants', 'cffi', 'nicelib', 'win32event']
@@ -77,7 +80,8 @@ sys.path[0:0] = ['.', '..']
 # Enable output of __init__ methods
 def skip(app, what, name, obj, skip, options):
     if name == "__init__":
-        return False
+        excludes = options.get('exclude-members', [])
+        return '__init__' in excludes
     return skip
 
 def setup(app):
@@ -181,7 +185,7 @@ pygments_style = 'sphinx'
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-#html_logo = None
+html_logo = '../images/logo.svg'
 
 # The name of an image file (within the static path) to use as favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32
@@ -192,6 +196,8 @@ pygments_style = 'sphinx'
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+
+html_css_files = ['custom.css']
 
 # If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
 # using the given strftime format.
